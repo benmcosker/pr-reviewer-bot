@@ -1,5 +1,7 @@
 # PR Reviewer Bot
 
+[![CI](https://github.com/benmcosker/pr-reviewer-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/benmcosker/pr-reviewer-bot/actions/workflows/ci.yml)
+
 A GitHub App that reviews pull requests with Claude. It verifies the webhook,
 pulls the diff, asks the Claude API for a structured review, and posts inline
 comments back on the PR.
