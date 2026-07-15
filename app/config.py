@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     request_timeout: float = 30.0
     max_http_retries: int = 4
 
+    # Resilience / large diffs (DESIGN §6, §7)
+    anthropic_max_retries: int = 4  # SDK auto-retries 429/5xx; bump for the worker
+    max_review_retries: int = 3     # per-file review attempts before giving up
+    max_diff_tokens: int = 16000    # per-unit budget; larger files reviewed hunk-by-hunk
+
 
 @lru_cache
 def get_settings() -> Settings:
