@@ -17,9 +17,10 @@ from .schema import Review
 def _client() -> AsyncAnthropic:
     # Constructed lazily so importing this module doesn't require a key.
     settings = get_settings()
+    retries = settings.anthropic_max_retries  # SDK backs off on 429/5xx, honors retry-after
     if settings.anthropic_api_key:
-        return AsyncAnthropic(api_key=settings.anthropic_api_key)
-    return AsyncAnthropic()  # falls back to ANTHROPIC_API_KEY / ant profile
+        return AsyncAnthropic(api_key=settings.anthropic_api_key, max_retries=retries)
+    return AsyncAnthropic(max_retries=retries)  # falls back to ANTHROPIC_API_KEY / ant profile
 
 
 async def review_file(path: str, diff_text: str) -> Review:

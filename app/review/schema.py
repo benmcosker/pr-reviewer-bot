@@ -43,8 +43,19 @@ def cap_nits(findings: list[Finding], max_per_file: int) -> list[Finding]:
     return kept
 
 
-def build_summary(findings: list[Finding], reviewed: int, total: int) -> str:
-    """A short overall body for the PR review."""
+def build_summary(
+    findings: list[Finding],
+    reviewed: int,
+    total: int,
+    oversize: list[str] | None = None,
+    failed: list[str] | None = None,
+) -> str:
+    """A short overall body for the PR review.
+
+    ``oversize`` = files too large to review in full; ``failed`` = files that
+    errored after retries. Both are surfaced so the PR author knows coverage
+    wasn't complete.
+    """
     if not findings:
         base = f"Reviewed {reviewed} file(s) — no issues found. ✅"
     else:
@@ -53,6 +64,15 @@ def build_summary(findings: list[Finding], reviewed: int, total: int) -> str:
             by_sev[f.severity] = by_sev.get(f.severity, 0) + 1
         parts = [f"{by_sev[s]} {s}" for s in ("blocker", "warning", "nit") if s in by_sev]
         base = f"Reviewed {reviewed} file(s): " + ", ".join(parts) + "."
+
+    notes: list[str] = []
     if total > reviewed:
-        base += f" ({total - reviewed} file(s) skipped.)"
+        notes.append(f"{total - reviewed} file(s) skipped")
+    if oversize:
+        notes.append(f"{len(set(oversize))} file(s) too large to review in full")
+    if failed:
+        notes.append(f"{len(set(failed))} file(s) errored after retries")
+    if notes:
+        base += " (" + "; ".join(notes) + ".)"
+
     return base + "\n\n_🤖 Automated review by Claude._"

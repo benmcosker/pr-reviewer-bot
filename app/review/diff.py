@@ -79,3 +79,41 @@ def split_diff_by_file(diff_text: str) -> list[FileDiff]:
 
 def should_skip(path: str, skip_globs: list[str]) -> bool:
     return any(fnmatch(path, g) for g in skip_globs)
+
+
+def estimate_tokens(text: str) -> int:
+    """Cheap offline token estimate (~4 chars/token).
+
+    Used as the large-diff gate so we don't pay a ``count_tokens`` round-trip
+    before every review; the exact count only matters near the budget edge.
+    """
+    return len(text) // 4
+
+
+def split_into_hunks(file_diff: FileDiff) -> list[str]:
+    """Split one file's diff into standalone single-hunk mini-diffs.
+
+    Each returned string re-parses on its own (it carries the ``diff --git`` /
+    ``---`` / ``+++`` header), so a too-large file can be reviewed one hunk at a
+    time. Returns the whole diff unchanged if there are no hunk markers.
+    """
+    lines = file_diff.diff_text.splitlines()
+    header: list[str] = []
+    i = 0
+    while i < len(lines) and not lines[i].startswith("@@"):
+        header.append(lines[i])
+        i += 1
+
+    hunks: list[list[str]] = []
+    current: list[str] | None = None
+    for line in lines[i:]:
+        if line.startswith("@@"):
+            if current is not None:
+                hunks.append(current)
+            current = header + [line]
+        elif current is not None:
+            current.append(line)
+    if current is not None:
+        hunks.append(current)
+
+    return ["\n".join(h) for h in hunks] or [file_diff.diff_text]

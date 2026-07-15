@@ -27,3 +27,12 @@ def test_summary_counts_and_skips():
     assert "1 blocker" in summary
     assert "1 nit" in summary
     assert "3 file(s) skipped" in summary
+
+
+def test_summary_oversize_and_failed():
+    findings = [_f("a.py", 1, "warning")]
+    summary = build_summary(
+        findings, reviewed=3, total=3, oversize=["big.py"], failed=["x.py", "y.py"]
+    )
+    assert "1 file(s) too large to review in full" in summary
+    assert "2 file(s) errored after retries" in summary
