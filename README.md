@@ -33,24 +33,75 @@ app/
 tests/               pure unit tests (no network, no API key needed)
 ```
 
-## Setup
+## Installation
+
+You need a **GitHub App** (the bot's identity) and an **Anthropic API key**.
+
+### 1. Clone and install
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env      # fill in GitHub App + Anthropic credentials
+cp .env.example .env      # you'll fill this in over the next steps
 ```
 
-## Run
+### 2. Create the GitHub App
+
+Go to **Settings → Developer settings → GitHub Apps → New GitHub App**
+(<https://github.com/settings/apps/new>) and set:
+
+- **Webhook → Active**, **Webhook URL** = your public `/webhooks` endpoint
+  (for local dev, a [smee.io](https://smee.io) channel — see step 5), and a
+  **Webhook secret** (any random string; `openssl rand -hex 24`).
+- **Repository permissions:**
+  - **Pull requests** → Read and write
+  - **Contents** → Read-only
+  - **Commit statuses** → Read and write
+  - (**Metadata** → Read-only is required automatically)
+- **Subscribe to events:** **Pull request**.
+
+Create the App, then from its **General** page:
+
+- Copy the **App ID** → `GITHUB_APP_ID` in `.env`.
+- Set the same webhook secret → `GITHUB_WEBHOOK_SECRET` in `.env`.
+
+### 3. Private key → `.env`
+
+On the App's General page, **Generate a private key** (downloads a `.pem`).
+Fold it into `.env` as a single escaped line. Write `awk`'s output straight to
+the file — piping it through `echo`/`$(...)` in some shells (e.g. zsh) turns the
+`\n` back into real newlines and breaks the value:
 
 ```bash
-uvicorn app.main:app --reload
-curl localhost:8000/healthz            # {"status":"ok"}
+{ printf 'GITHUB_PRIVATE_KEY='; awk 'BEGIN{ORS="\\n"} 1' path/to/key.pem; echo; } >> .env
 ```
 
-Forward GitHub webhooks to localhost during development with
-[smee.io](https://smee.io) or `ngrok http 8000`, and point the GitHub App's
-webhook URL at it.
+Then add your `ANTHROPIC_API_KEY`. (See [.env.example](.env.example) for every
+supported variable.)
+
+### 4. Install the App on your repositories
+
+On the App's page → **Install App** → choose your account/org → select the
+repositories to review. The bot reviews any PR opened or updated on those repos.
+
+### 5. Run it
+
+```bash
+uvicorn app.main:app                       # starts the receiver + worker
+curl localhost:8000/healthz                # {"status":"ok"}
+```
+
+For local development, forward GitHub's webhooks to your machine with smee
+(point the App's Webhook URL at the channel):
+
+```bash
+npx smee-client -u https://smee.io/<your-channel> -t http://localhost:8000/webhooks
+```
+
+Open or update a PR on an installed repo — the bot posts inline review comments
+and a `claude-review` commit status within seconds. In production, deploy the
+process behind a public HTTPS URL and use that as the Webhook URL instead of smee
+(see [DESIGN.md](DESIGN.md) §12).
 
 ## Test
 
@@ -58,11 +109,12 @@ webhook URL at it.
 pytest
 ```
 
-The unit tests (signature verification, diff parsing, finding filters) run with
-no network access and no API key. See `DESIGN.md` §11 for the wider test plan.
+The unit tests (signature verification, diff parsing, finding filters, retry)
+run with no network access and no API key. Live smoke tests for each half of the
+pipeline live in [scripts/](scripts) and read credentials from `.env`.
 
 ## Status
 
-Scaffold — all components are in place and wired end to end. Next per
-`DESIGN.md` §13: exercise against a real PR (installation token → diff → review →
-comments), then harden retries and large-diff chunking.
+Working v1 — validated end to end against a live GitHub App: webhook → auth →
+diff → Claude review → inline comments → commit status. See `DESIGN.md` §14 for
+stretch goals (Redis-backed queue, `@bot` commands, persisted stats).
