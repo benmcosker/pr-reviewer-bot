@@ -17,7 +17,7 @@ from ..review.diff import (
 from ..review.engine import review_file
 from ..review.schema import Finding, build_summary, cap_nits
 from .jobs import ReviewJob
-from .queue import JobQueue
+from .queue import SupportsJobQueue
 from .retry import call_with_retries
 
 logger = logging.getLogger(__name__)
@@ -111,16 +111,31 @@ async def process_job(job: ReviewJob) -> None:
             raise
 
 
-async def worker_loop(queue: JobQueue) -> None:
-    logger.info("worker started")
+async def worker_loop(queue: SupportsJobQueue, name: str = "worker") -> None:
+    logger.info("%s started", name)
     while True:
         job = await queue.get()
         try:
             await process_job(job)
         except asyncio.CancelledError:
+            # No ack: on the redis backend the job stays in `processing`, so
+            # recover() requeues it on the next boot instead of losing it.
             raise
         except Exception:
-            # process_job already logged; keep the worker alive for the next job.
+            # process_job already logged; keep the worker alive for the next
+            # job. Fall through to the ack — a poison job must not requeue.
             pass
-        finally:
-            queue.task_done()
+        await queue.task_done(job)
+
+
+def start_workers(queue: SupportsJobQueue, n: int) -> list[asyncio.Task]:
+    """Spawn ``n`` concurrent worker loops on one queue.
+
+    ``n`` bounds how many PRs are reviewed at once — the throttle against both
+    rate-limited APIs. ``n=0`` means this process only enqueues (a web process
+    in the split web/worker deployment).
+    """
+    return [
+        asyncio.create_task(worker_loop(queue, name=f"worker-{i}"), name=f"worker-{i}")
+        for i in range(n)
+    ]

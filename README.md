@@ -18,9 +18,12 @@ app/
     security.py      X-Hub-Signature-256 HMAC verification
     webhooks.py      POST /webhooks — verify, enqueue, 202
   worker/
-    jobs.py          ReviewJob
-    queue.py         in-process asyncio queue + delivery-id dedupe (Redis is the v2 seam)
-    runner.py        the job loop: auth → diff → review → post
+    jobs.py          ReviewJob (+ JSON round-trip for the redis backend)
+    queue.py         in-process asyncio queue + delivery-id dedupe; make_queue factory
+    redis_queue.py   durable shared queue (BLMOVE/LREM reliable pattern + recovery)
+    runner.py        the job loop: auth → diff → review → post; start_workers pool
+    __main__.py      standalone worker process (python -m app.worker)
+    retry.py         per-file retry with backoff
   github/
     auth.py          app JWT → cached installation token
     client.py        REST client with backoff on 429/5xx
@@ -102,6 +105,29 @@ Open or update a PR on an installed repo — the bot posts inline review comment
 and a `claude-review` commit status within seconds. In production, deploy the
 process behind a public HTTPS URL and use that as the Webhook URL instead of smee
 (see [DESIGN.md](DESIGN.md) §12).
+
+## Scaling
+
+Concurrency and durability are separate knobs:
+
+- **Concurrent PRs** — `WORKER_CONCURRENCY` (default 4) sets how many reviews
+  run at once, with any backend. It's also the throttle against the two
+  rate-limited APIs, so don't crank it blindly.
+- **Durability / multiple processes** — the default `memory` queue is
+  in-process: zero infrastructure, but queued jobs die with the process. Set
+  `QUEUE_BACKEND=redis` (and `REDIS_URL`) for a durable queue shared across
+  processes: jobs survive restarts (a reliable-queue pattern requeues work
+  orphaned by a crash), and webhook delivery-ids dedupe across all workers.
+
+With redis you can split web from workers:
+
+```bash
+WORKER_CONCURRENCY=0 uvicorn app.main:app    # web: verify + enqueue only
+python -m app.worker                          # workers: run this on 1..N hosts
+```
+
+A single process with the memory queue is plenty for one account's repos; the
+redis split is for surviving redeploys and scaling out.
 
 ## Test
 

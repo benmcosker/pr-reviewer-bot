@@ -6,6 +6,7 @@ the app before a job actually needs credentials.
 """
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -53,6 +54,12 @@ class Settings(BaseSettings):
     anthropic_max_retries: int = 4  # SDK auto-retries 429/5xx; bump for the worker
     max_review_retries: int = 3     # per-file review attempts before giving up
     max_diff_tokens: int = 16000    # per-unit budget; larger files reviewed hunk-by-hunk
+
+    # Queue & workers (DESIGN §14 — v2 seam)
+    queue_backend: Literal["memory", "redis"] = "memory"
+    redis_url: str = "redis://localhost:6379/0"
+    worker_concurrency: int = 4     # concurrent PR reviews; 0 = enqueue-only web process
+    job_dedupe_ttl: int = 86400     # seconds a delivery id stays deduped (redis backend)
 
 
 @lru_cache
