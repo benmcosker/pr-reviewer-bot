@@ -70,6 +70,10 @@ class GitHubClient:
         )
         return resp.text
 
+    async def get_pull(self, owner: str, repo: str, number: int) -> dict:
+        resp = await self._request("GET", f"/repos/{owner}/{repo}/pulls/{number}")
+        return resp.json()
+
     async def list_review_comments(self, owner: str, repo: str, number: int) -> list[dict]:
         resp = await self._request("GET", f"/repos/{owner}/{repo}/pulls/{number}/comments")
         return resp.json()

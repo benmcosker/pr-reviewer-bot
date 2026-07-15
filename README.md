@@ -66,3 +66,5 @@ no network access and no API key. See `DESIGN.md` §11 for the wider test plan.
 Scaffold — all components are in place and wired end to end. Next per
 `DESIGN.md` §13: exercise against a real PR (installation token → diff → review →
 comments), then harden retries and large-diff chunking.
+
+<-p smoke test -->
