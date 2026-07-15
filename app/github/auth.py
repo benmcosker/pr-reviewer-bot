@@ -30,7 +30,8 @@ class InstallationAuth:
         settings = get_settings()
         now = int(time.time())
         key = settings.github_private_key.replace("\\n", "\n")
-        payload = {"iat": now - 60, "exp": now + 9 * 60, "iss": settings.github_app_id}
+        # iss must be a string — PyJWT rejects a bare int App ID.
+        payload = {"iat": now - 60, "exp": now + 9 * 60, "iss": str(settings.github_app_id)}
         return jwt.encode(payload, key, algorithm="RS256")
 
     async def token(self, installation_id: int) -> str:
