@@ -10,9 +10,10 @@ See [DESIGN.md](DESIGN.md) for the full architecture and rationale.
 
 ## Live on Faceplant
 
-This isn't a demo. pr-reviewer-bot runs on my Faceplant project, reviewing
-real pull requests as they open. The reviews below are unedited — the bot
-posted them; I'm just linking them.
+This isn't a demo. pr-reviewer-bot runs on my
+[Faceplant](https://github.com/benmcosker/Faceplant) project, reviewing real
+pull requests as they open. The reviews below are unedited — the bot posted
+them; I'm just linking them.
 
 ## Layout
 
