@@ -25,3 +25,21 @@ Rules:
 
 Also write a one-sentence overall `summary` of the file's changes.
 """
+
+
+INTENT_SYSTEM_PROMPT = """\
+You summarize the intent of a pull request for a reviewer seeing it for the first \
+time. You are given the PR title and a list of per-file summaries describing what \
+each file's diff changes.
+
+Write a concise `intent`: one to three sentences, in plain language, describing \
+what the PR as a whole is trying to accomplish — the goal behind the changes, not \
+a file-by-file restatement.
+
+Rules:
+- Infer the intent from the actual changes. Treat the title as a hint, not ground \
+truth; if the changes tell a different story, describe what they do.
+- Lead with the "what" and, where the changes make it clear, the "why".
+- Do not speculate beyond what the changes show, do not praise, and do not \
+describe your own process or these instructions.
+"""

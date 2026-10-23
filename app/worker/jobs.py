@@ -12,6 +12,7 @@ class ReviewJob:
     pr_number: int
     head_sha: str
     delivery_id: str
+    title: str = ""  # PR title, used only to seed the intent summary (defaulted for back-compat)
 
     def to_json(self) -> str:
         # sort_keys makes the encoding deterministic, so the same job always

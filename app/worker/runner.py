@@ -14,8 +14,8 @@ from ..review.diff import (
     split_diff_by_file,
     split_into_hunks,
 )
-from ..review.engine import review_file
-from ..review.schema import Finding, build_summary, cap_nits
+from ..review.engine import review_file, summarize_intent
+from ..review.schema import Finding, build_summary, cap_nits, render_intent
 from .jobs import ReviewJob
 from .queue import SupportsJobQueue
 from .retry import call_with_retries
@@ -33,15 +33,18 @@ def _review_units(fd: FileDiff, settings: Settings) -> list[str]:
 
 async def _review_one_file(
     fd: FileDiff, settings: Settings
-) -> tuple[list[Finding], bool, bool]:
-    """Review a single file. Returns (findings, errored, had_oversize_unit).
+) -> tuple[list[Finding], bool, bool, str]:
+    """Review a single file. Returns (findings, errored, had_oversize_unit, summary).
 
     A file's review is retried in isolation; if it still fails it's reported as
-    errored rather than sinking the whole PR.
+    errored rather than sinking the whole PR. ``summary`` is the model's one-line
+    description of the file's changes (first non-empty across units), reused to
+    build the PR intent summary; empty when nothing came back.
     """
     findings: list[Finding] = []
     errored = False
     oversize = False
+    summary = ""
     for unit in _review_units(fd, settings):
         if estimate_tokens(unit) > settings.max_diff_tokens:
             # A single hunk that blows the budget — skip it, note it.
@@ -58,11 +61,31 @@ async def _review_one_file(
             logger.exception("giving up on %s after %d attempts", fd.path, settings.max_review_retries)
             errored = True
             continue
+        if not summary and review.summary:
+            summary = review.summary
         for finding in review.findings:
             finding.path = fd.path  # trust our file boundary
             if finding.line in fd.valid_lines:
                 findings.append(finding)
-    return findings, errored, oversize
+    return findings, errored, oversize, summary
+
+
+async def _intent_block(job: ReviewJob, file_summaries: list[tuple[str, str]]) -> str:
+    """The PR intent summary + file breakdown, or '' when it can't be built.
+
+    Fails soft: a summary is a nice-to-have, so an error here must never sink the
+    actual review.
+    """
+    if not file_summaries:
+        return ""
+    try:
+        result = await summarize_intent(job.title, file_summaries)
+    except Exception:
+        logger.exception("intent summary failed for %s#%d", job.repo, job.pr_number)
+        return ""
+    if not result.intent.strip():
+        return ""
+    return render_intent(result.intent, file_summaries)
 
 
 async def process_job(job: ReviewJob) -> None:
@@ -81,17 +104,24 @@ async def process_job(job: ReviewJob) -> None:
             reviewed = 0
             failed_files: list[str] = []
             oversize_files: list[str] = []
+            file_summaries: list[tuple[str, str]] = []
             for fd in files[: settings.max_files_per_pr]:
-                file_findings, errored, oversize = await _review_one_file(fd, settings)
+                file_findings, errored, oversize, file_summary = await _review_one_file(fd, settings)
                 findings.extend(file_findings)
                 reviewed += 1
                 if errored:
                     failed_files.append(fd.path)
                 if oversize:
                     oversize_files.append(fd.path)
+                if file_summary:
+                    file_summaries.append((fd.path, file_summary))
 
             findings = cap_nits(findings, settings.max_nits_per_file)
             summary = build_summary(findings, reviewed, len(files), oversize_files, failed_files)
+            if settings.intent_summary:
+                intent = await _intent_block(job, file_summaries)
+                if intent:
+                    summary = f"{intent}\n\n---\n\n{summary}"
             await post_review(gh, job, findings, summary)
 
             # Fail the check only if every attempted file errored; otherwise the

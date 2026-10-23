@@ -1,4 +1,4 @@
-from app.review.schema import Finding, build_summary, cap_nits
+from app.review.schema import Finding, build_summary, cap_nits, render_intent
 
 
 def _f(path: str, line: int, severity: str) -> Finding:
@@ -36,3 +36,27 @@ def test_summary_oversize_and_failed():
     )
     assert "1 file(s) too large to review in full" in summary
     assert "2 file(s) errored after retries" in summary
+
+
+def test_render_intent_includes_intent_and_breakdown():
+    out = render_intent(
+        "Adds a durable Redis queue so jobs survive restarts.",
+        [("app/worker/redis_queue.py", "New reliable-queue backend."), ("README.md", "Documents the seam.")],
+    )
+    assert "What this PR does" in out
+    assert "survive restarts" in out
+    assert "### File breakdown" in out
+    assert "- **`app/worker/redis_queue.py`** — New reliable-queue backend." in out
+    assert "- **`README.md`** — Documents the seam." in out
+
+
+def test_render_intent_drops_empty_summaries():
+    out = render_intent("Does a thing.", [("a.py", "Real summary."), ("b.py", "  ")])
+    assert "a.py" in out
+    assert "b.py" not in out
+
+
+def test_render_intent_omits_breakdown_when_no_summaries():
+    out = render_intent("Does a thing.", [])
+    assert "Does a thing." in out
+    assert "File breakdown" not in out

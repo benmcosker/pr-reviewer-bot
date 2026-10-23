@@ -25,6 +25,27 @@ class Review(BaseModel):
     findings: list[Finding]
 
 
+class IntentSummary(BaseModel):
+    intent: str  # 1-3 sentences: what the PR as a whole is trying to accomplish
+
+
+def render_intent(intent: str, file_summaries: list[tuple[str, str]]) -> str:
+    """Render the PR intent block posted at the top of the review.
+
+    ``file_summaries`` is ``[(path, one-line summary), ...]`` — the per-file
+    summaries the engine already produces, reused here as the file breakdown so
+    nothing is re-sent to the model. Rows with an empty summary are dropped.
+    """
+    lines = ["## 🔭 What this PR does", "", intent.strip()]
+
+    breakdown = [(p, s.strip()) for p, s in file_summaries if s.strip()]
+    if breakdown:
+        lines += ["", "### File breakdown", ""]
+        lines += [f"- **`{path}`** — {summary}" for path, summary in breakdown]
+
+    return "\n".join(lines)
+
+
 def cap_nits(findings: list[Finding], max_per_file: int) -> list[Finding]:
     """Keep every blocker/warning; cap ``nit`` findings per file.
 

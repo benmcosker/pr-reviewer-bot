@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     # Tunables
     max_files_per_pr: int = 40
     max_nits_per_file: int = 3
+    intent_summary: bool = True     # post a PR intent summary + file breakdown atop the review
     skip_globs: list[str] = DEFAULT_SKIP_GLOBS
     request_timeout: float = 30.0
     max_http_retries: int = 4

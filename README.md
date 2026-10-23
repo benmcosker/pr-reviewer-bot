@@ -4,7 +4,8 @@
 
 A GitHub App that reviews pull requests with Claude. It verifies the webhook,
 pulls the diff, asks the Claude API for a structured review, and posts inline
-comments back on the PR.
+comments back on the PR — led by a short **intent summary**: what the PR is
+trying to do, with a one-line breakdown per file.
 
 See [DESIGN.md](DESIGN.md) for the full architecture and rationale.
 
@@ -36,12 +37,37 @@ app/
     client.py        REST client with backoff on 429/5xx
     review.py        map findings → inline comments, post one batched review
   review/
-    schema.py        Finding / Review pydantic models + helpers
-    prompt.py        frozen system prompt (cached prefix)
+    schema.py        Finding / Review / IntentSummary models + helpers (intent renderer)
+    prompt.py        frozen system prompts (cached prefix): per-file review + PR intent
     diff.py          unified-diff parsing + line-anchor validation
-    engine.py        the Claude call (structured output, adaptive thinking)
+    engine.py        the Claude calls (review_file + summarize_intent; structured output)
 tests/               pure unit tests (no network, no API key needed)
 ```
+
+## Intent summary
+
+Every review opens with a PR-level summary so a reviewer sees the *why* before
+the line notes:
+
+```markdown
+## 🔭 What this PR does
+
+Adds a durable Redis-backed queue so in-flight reviews survive a redeploy, with
+the web and worker processes able to run separately.
+
+### File breakdown
+- **`app/worker/redis_queue.py`** — New reliable-queue backend (BLMOVE/LREM + recovery).
+- **`README.md`** — Documents the memory→redis seam and the split deployment.
+
+---
+Reviewed 2 file(s): 1 warning. _🤖 Automated review by Claude._
+```
+
+It's a second, cheap Claude call that reuses the one-line summaries already
+produced while reviewing each file (no diffs re-sent), so the intent is grounded
+in what actually changed rather than the PR description. It fails soft — if that
+call errors, the review still posts without the block. Turn it off with
+`INTENT_SUMMARY=false`.
 
 ## Installation
 
