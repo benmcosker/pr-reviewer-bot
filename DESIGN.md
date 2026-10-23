@@ -202,6 +202,29 @@ anchors.
 
 ---
 
+### 5.4 PR intent summary
+
+Per-file review answers "is this line OK?" but never "what is this PR *for*?".
+A second pass fills that gap:
+
+- While reviewing each file we already get a one-line `Review.summary`. The
+  runner collects those `(path, summary)` pairs (previously discarded).
+- After the per-file loop, `summarize_intent(title, file_summaries)` makes one
+  small structured-output call (`IntentSummary{intent}`) that synthesizes the
+  overall intent from the PR title + those summaries — **no diffs re-sent**, so
+  it's cheap and grounded in what actually changed, not the author's description.
+- `render_intent` turns it into a markdown block (overall intent + a file
+  breakdown reusing the same per-file summaries) that is prepended to the review
+  body. The file breakdown is rendered from the collected summaries, not the
+  model's echo, so paths can't be hallucinated.
+
+Fails soft: an error (or an empty result) in the intent pass is logged and
+skipped — the review still posts. Gated by `INTENT_SUMMARY` (default on). The
+PR title rides along on `ReviewJob` (defaulted, so old queued jobs still
+deserialize).
+
+---
+
 ## 6. Handling large diffs
 - **Per-file review** is the default unit — keeps each Claude call small,
   cacheable, and independently retryable.
@@ -316,7 +339,8 @@ Never log the raw private key or tokens. Installation tokens live in memory only
 ## 14. Stretch goals
 - Redis-backed queue + multiple workers.
 - `@bot` mention commands (re-review, ignore file).
-- Summary comment with counts by severity.
+- Summary comment with counts by severity. *(done — see §5.4 and `build_summary`.)*
+- PR intent summary + file breakdown. *(done — see §5.4.)*
 - Persist reviews (SQLite) for a tiny stats page.
 - Prompt-cache warming and per-repo custom review guidelines.
 ```

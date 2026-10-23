@@ -9,8 +9,8 @@ from functools import lru_cache
 from anthropic import AsyncAnthropic
 
 from ..config import get_settings
-from .prompt import SYSTEM_PROMPT
-from .schema import Review
+from .prompt import INTENT_SYSTEM_PROMPT, SYSTEM_PROMPT
+from .schema import IntentSummary, Review
 
 
 @lru_cache
@@ -46,3 +46,35 @@ async def review_file(path: str, diff_text: str) -> Review:
         output_format=Review,
     )
     return resp.parsed_output or Review(summary="", findings=[])
+
+
+async def summarize_intent(title: str, file_summaries: list[tuple[str, str]]) -> IntentSummary:
+    """Synthesize the PR's overall intent from its title and per-file summaries.
+
+    A cheap second pass: it reads the one-line summaries already produced while
+    reviewing each file (not the diffs again), so it costs a small call with no
+    extra diff tokens.
+    """
+    settings = get_settings()
+    breakdown = "\n".join(f"- `{path}`: {summary}" for path, summary in file_summaries)
+    resp = await _client().messages.parse(
+        model=settings.review_model,
+        max_tokens=1500,
+        thinking={"type": "adaptive"},
+        output_config={"effort": "medium"},
+        system=[
+            {
+                "type": "text",
+                "text": INTENT_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},  # cache the stable prefix
+            }
+        ],
+        messages=[
+            {
+                "role": "user",
+                "content": f"PR title: {title or '(none)'}\n\nPer-file summaries:\n{breakdown}",
+            }
+        ],
+        output_format=IntentSummary,
+    )
+    return resp.parsed_output or IntentSummary(intent="")

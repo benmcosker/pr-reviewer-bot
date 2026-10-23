@@ -48,6 +48,7 @@ async def receive(request: Request) -> Response:
             pr_number=payload["number"],
             head_sha=pr["head"]["sha"],
             delivery_id=request.headers.get("X-GitHub-Delivery", ""),
+            title=pr.get("title", ""),
         )
     except KeyError as exc:  # malformed / unexpected payload
         logger.warning("dropping webhook, missing field: %s", exc)
